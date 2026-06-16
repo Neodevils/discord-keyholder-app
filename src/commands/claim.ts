@@ -1,13 +1,10 @@
-import {
-	CommandBuilder,
-	InteractionFlags,
-	MiniPermFlags,
-} from "@minesa-org/mini-interaction";
+import { CommandBuilder, InteractionFlags } from "@minesa-org/mini-interaction";
 import type { CommandInteraction, InteractionCommand } from "@minesa-org/mini-interaction";
 import { db } from "../utils/database.js";
 
 const CLAIM_COOLDOWN_MS = 15 * 60 * 1000;
 const DISCORD_API_BASE = "https://discord.com/api/v10";
+const CLAIM_ROLE_ID = "1333017381529976874";
 
 type GuildMember = {
 	user?: {
@@ -38,14 +35,14 @@ function formatDuration(milliseconds: number) {
 	const minutes = Math.floor(totalSeconds / 60);
 	const seconds = totalSeconds % 60;
 
-	return `${minutes}dk ${seconds.toString().padStart(2, "0")}sn`;
+	return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
 }
 
 async function discordRequest(path: string, init: RequestInit = {}) {
 	const token = process.env.DISCORD_BOT_TOKEN;
 
 	if (!token) {
-		throw new Error("DISCORD_BOT_TOKEN ortam değişkeni ayarlı değil.");
+		throw new Error("DISCORD_BOT_TOKEN environment variable is not set.");
 	}
 
 	const response = await fetch(`${DISCORD_API_BASE}${path}`, {
@@ -59,7 +56,7 @@ async function discordRequest(path: string, init: RequestInit = {}) {
 
 	if (!response.ok) {
 		const body = await response.text();
-		throw new Error(`Discord API hatası (${response.status}): ${body}`);
+		throw new Error(`Discord API error (${response.status}): ${body}`);
 	}
 
 	return response;
@@ -123,70 +120,55 @@ async function giveRoleToMember(guildId: string, roleId: string, userId: string)
 
 const claim: InteractionCommand = {
 	data: new CommandBuilder()
-		.setDefaultMemberPermissions(MiniPermFlags.ManageRoles)
 		.setDMPermission(false)
 		.setName("claim")
-		.setDescription("Seçilen rolü herkesten alıp size verir.")
-		.addRoleOption((option) =>
-			option
-				.setName("rol")
-				.setDescription("Claimlenecek rol")
-				.setRequired(true)
-		),
+		.setDescription("Claim the keyholder role."),
 
 	handler: async (interaction: CommandInteraction) => {
 		await interaction.deferReply({ flags: InteractionFlags.Ephemeral });
 
 		const guildId = interaction.guild_id;
-		const role = interaction.options.getRole("rol", true);
-
-		if (!role) {
-			await interaction.editReply({
-				content: "Claimlenecek rol bulunamadı.",
-			});
-			return;
-		}
-
+		const roleId = CLAIM_ROLE_ID;
 		const userId = interaction.member?.user?.id ?? interaction.user?.id;
 
 		if (!guildId || !userId) {
 			await interaction.editReply({
-				content: "Bu komut sadece sunucu içinde kullanılabilir.",
+				content: "This command can only be used in a server.",
 			});
 			return;
 		}
 
-		const cooldownKey = getCooldownKey(guildId, role.id);
+		const cooldownKey = getCooldownKey(guildId, roleId);
 		const cooldown = (await db.get(cooldownKey)) as ClaimCooldownRecord | null;
 		const remainingCooldown = getRemainingCooldown(cooldown);
 
 		if (remainingCooldown > 0) {
 			await interaction.editReply({
-				content: `Bu rol yakın zamanda claimlendi. Tekrar kullanmak için ${formatDuration(remainingCooldown)} bekleyin.`,
+				content: `This role was claimed recently. Please wait ${formatDuration(remainingCooldown)} before claiming it again.`,
 			});
 			return;
 		}
 
 		try {
-			const removedCount = await removeRoleFromMembers(guildId, role.id, userId);
-			await giveRoleToMember(guildId, role.id, userId);
+			const removedCount = await removeRoleFromMembers(guildId, roleId, userId);
+			await giveRoleToMember(guildId, roleId, userId);
 
 			const claimedAt = Date.now();
 			await db.set(cooldownKey, {
 				guildId,
-				roleId: role.id,
+				roleId,
 				claimedBy: userId,
 				claimedAt,
 				nextClaimAt: claimedAt + CLAIM_COOLDOWN_MS,
 			});
 
 			await interaction.editReply({
-				content: `✅ <@&${role.id}> rolü claimlendi. Rol ${removedCount} kişiden alındı ve size verildi. 15dk bekleme süresi başladı.`,
+				content: `✅ You claimed <@&${roleId}>. The role was removed from ${removedCount} member(s) and assigned to you. The 15-minute cooldown has started.`,
 			});
 		} catch (error) {
 			console.error("❌ Claim command failed:", error);
 			await interaction.editReply({
-				content: "❌ Rol claimlenemedi. Botun Manage Roles yetkisi olduğundan ve rolün bot rolünün altında kaldığından emin olun.",
+				content: "❌ Could not claim the role. Make sure the bot has Manage Roles permission and that the claimed role is below the bot's highest role.",
 			});
 		}
 	},

@@ -9,16 +9,16 @@ Use this repository as a starting point for your mini-interaction Discord app.
 
 ## 2. `/claim` command
 
-`/claim rol:<role>` seçilen rolü sunucudaki herkesten alır, komutu kullanan üyeye verir ve aynı rol için 15 dakikalık bekleme süresi başlatır.
+`/claim` assigns the fixed keyholder role (`1333017381529976874`) to the member who runs the command, removes that role from everyone else in the server, and starts a 15-minute cooldown for the same server and role.
 
-Gerekli Vercel environment variables:
+Required Vercel environment variables:
 
 -   `DISCORD_APPLICATION_ID`
--   `DISCORD_PUBLIC_KEY` veya `DISCORD_APP_PUBLIC_KEY`
+-   `DISCORD_PUBLIC_KEY` or `DISCORD_APP_PUBLIC_KEY`
 -   `DISCORD_BOT_TOKEN`
--   `MONGODB_URI` (15 dakikalık bekleme süresinin Vercel serverless ortamında kalıcı tutulması için)
+-   `MONGODB_URI` from the Vercel MongoDB integration, used to persist the 15-minute cooldown across serverless invocations and deployments
 
-Botun sunucuda **Manage Roles** yetkisi olmalı ve claimlenecek rol botun en yüksek rolünün altında kalmalıdır. Büyük sunucularda üyeleri listeleyebilmek için botun Discord Developer Portal üzerinde gerekli member intent ayarlarına da ihtiyaç duyabilir.
+Members can run `/claim` without parameters. The bot still needs **Manage Roles** permission, and the fixed keyholder role must be below the bot's highest role. Large servers may also require the relevant member intent in the Discord Developer Portal so the bot can list members and remove the role from the previous holder.
 
 ## 3. Run locally
 
