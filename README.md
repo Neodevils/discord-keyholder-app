@@ -7,13 +7,25 @@ Use this repository as a starting point for your mini-interaction Discord app.
 -   Clone the repo and install dependencies: `npm install`
 -   Create your `.env` from `.env.example`, then fill in the values you need
 
-## 2. Run locally
+## 2. `/claim` command
 
--   Register commands: `npm run register` to load `dist/commands/**.js`
--   Run build to build `dist` folder
--   Run `vercel --prod` to connect your repository on vercel to run your app
+`/claim` assigns the fixed keyholder role (`1333017381529976874`) to the member who runs the command, removes that role from everyone else in the server, and starts a 15-minute cooldown for the same server and role.
 
-## 3. Deploy to Vercel
+Required Vercel environment variables:
+
+-   `DISCORD_APPLICATION_ID`
+-   `DISCORD_PUBLIC_KEY` or `DISCORD_APP_PUBLIC_KEY`
+-   `DISCORD_BOT_TOKEN`
+-   `MONGODB_URI` from the Vercel MongoDB integration, used to persist the 15-minute cooldown across serverless invocations and deployments
+
+Members can run `/claim` without parameters. The bot still needs **Manage Roles** permission, and the fixed keyholder role must be below the bot's highest role. Large servers may also require the relevant member intent in the Discord Developer Portal so the bot can list members and remove the role from the previous holder.
+
+## 3. Run locally
+
+-   Register commands: `npm run build`
+-   Run `vercel --prod` to connect your repository on Vercel to run your app
+
+## 4. Deploy to Vercel
 
 -   Install the Vercel CLI once: `npm install -g vercel`
 -   Log in and link this project: `vercel login` then `vercel link`
