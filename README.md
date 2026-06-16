@@ -18,7 +18,7 @@ Required Vercel environment variables:
 -   `DISCORD_BOT_TOKEN`
 -   `MONGODB_URI` from the Vercel MongoDB integration, used to persist the 15-minute cooldown across serverless invocations and deployments
 
-Members can run `/claim` without parameters. The bot still needs **Manage Roles** permission, and the fixed keyholder role must be below the bot's highest role. Large servers may also require the relevant member intent in the Discord Developer Portal so the bot can list members and remove the role from the previous holder.
+Members can run `/claim` without parameters and do not need elevated Discord permissions. The bot still needs **Manage Roles** permission, and the fixed keyholder role must be below the bot's highest role. Large servers may also require the relevant member intent in the Discord Developer Portal so the bot can list members and remove the role from the previous holder.
 
 ## 3. Run locally
 

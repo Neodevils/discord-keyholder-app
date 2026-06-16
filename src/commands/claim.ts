@@ -120,6 +120,7 @@ async function giveRoleToMember(guildId: string, roleId: string, userId: string)
 
 const claim: InteractionCommand = {
 	data: new CommandBuilder()
+		.setDefaultMemberPermissions(null)
 		.setDMPermission(false)
 		.setName("claim")
 		.setDescription("Claim the keyholder role."),
