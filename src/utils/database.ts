@@ -1,16 +1,28 @@
 import { MiniDatabase } from "@minesa-org/mini-interaction";
 
-/**
- * Shared database instance for the application.
- */
-export const db = MiniDatabase.fromEnv();
+let dbInstance: MiniDatabase | null = null;
+
+export function getDb() {
+	if (!dbInstance) {
+		dbInstance = MiniDatabase.fromEnv();
+	}
+	return dbInstance;
+}
+
+export function tryGetDb() {
+	try {
+		return getDb();
+	} catch {
+		return null;
+	}
+}
 
 /**
  * Gets user data from the database.
  */
 export async function getUserData(userId: string) {
 	try {
-		return await db.get(userId);
+		return await getDb().get(userId);
 	} catch (error) {
 		console.error("❌ Error getting user data:", error);
 		throw error;
@@ -23,7 +35,7 @@ export async function getUserData(userId: string) {
  */
 export async function setUserMiniAppStatus(userId: string) {
 	try {
-		return await db.set(userId, {
+		return await getDb().set(userId, {
 			userId,
 			is_miniapp: true,
 			lastUpdated: Date.now(),

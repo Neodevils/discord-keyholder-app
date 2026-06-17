@@ -1,6 +1,6 @@
 import { CommandBuilder, InteractionFlags } from "@minesa-org/mini-interaction";
 import type { CommandInteraction, InteractionCommand } from "@minesa-org/mini-interaction";
-import { db } from "../utils/database.js";
+import { tryGetDb } from "../utils/database.ts";
 
 const CLAIM_COOLDOWN_MS = 15 * 60 * 1000;
 const DISCORD_API_BASE = "https://discord.com/api/v10";
@@ -62,54 +62,10 @@ async function discordRequest(path: string, init: RequestInit = {}) {
 	return response;
 }
 
-async function fetchMembersWithRole(guildId: string, roleId: string) {
-	const members: GuildMember[] = [];
-	let after = "0";
-
-	while (true) {
-		const response = await discordRequest(
-			`/guilds/${guildId}/members?limit=1000&after=${after}`
-		);
-		const page = (await response.json()) as GuildMember[];
-
-		if (page.length === 0) {
-			break;
-		}
-
-		for (const member of page) {
-			if (member.roles?.includes(roleId)) {
-				members.push(member);
-			}
-		}
-
-		const lastUserId = page.at(-1)?.user?.id;
-		if (page.length < 1000 || !lastUserId) {
-			break;
-		}
-
-		after = lastUserId;
-	}
-
-	return members;
-}
-
-async function removeRoleFromMembers(guildId: string, roleId: string, excludedUserId: string) {
-	const members = await fetchMembersWithRole(guildId, roleId);
-	let removedCount = 0;
-
-	for (const member of members) {
-		const userId = member.user?.id;
-		if (!userId || userId === excludedUserId) {
-			continue;
-		}
-
-		await discordRequest(`/guilds/${guildId}/members/${userId}/roles/${roleId}`, {
-			method: "DELETE",
-		});
-		removedCount += 1;
-	}
-
-	return removedCount;
+async function removeRoleFromMember(guildId: string, roleId: string, userId: string) {
+	await discordRequest(`/guilds/${guildId}/members/${userId}/roles/${roleId}`, {
+		method: "DELETE",
+	});
 }
 
 async function giveRoleToMember(guildId: string, roleId: string, userId: string) {
@@ -140,31 +96,44 @@ const claim: InteractionCommand = {
 		}
 
 		const cooldownKey = getCooldownKey(guildId, roleId);
-		const cooldown = (await db.get(cooldownKey)) as ClaimCooldownRecord | null;
+		const db = tryGetDb();
+		const cooldown = db ? ((await db.get(cooldownKey)) as ClaimCooldownRecord | null) : null;
 		const remainingCooldown = getRemainingCooldown(cooldown);
 
 		if (remainingCooldown > 0) {
 			await interaction.editReply({
-				content: `This role was claimed recently. Please wait ${formatDuration(remainingCooldown)} before claiming it again.`,
+				content: `You are in cooldown. Please wait ${formatDuration(remainingCooldown)} before claiming it again.`,
 			});
 			return;
 		}
 
 		try {
-			const removedCount = await removeRoleFromMembers(guildId, roleId, userId);
+			let removedCount = 0;
+			const previousHolderId = typeof cooldown?.claimedBy === "string" ? cooldown.claimedBy : null;
+			if (previousHolderId && previousHolderId !== userId) {
+				try {
+					await removeRoleFromMember(guildId, roleId, previousHolderId);
+					removedCount = 1;
+				} catch (error) {
+					// If previous holder already doesn't have the role (or can't be edited), we still proceed.
+					console.warn("⚠️ Could not remove role from previous holder:", error);
+				}
+			}
 			await giveRoleToMember(guildId, roleId, userId);
 
-			const claimedAt = Date.now();
-			await db.set(cooldownKey, {
-				guildId,
-				roleId,
-				claimedBy: userId,
-				claimedAt,
-				nextClaimAt: claimedAt + CLAIM_COOLDOWN_MS,
-			});
+			if (db) {
+				const claimedAt = Date.now();
+				await db.set(cooldownKey, {
+					guildId,
+					roleId,
+					claimedBy: userId,
+					claimedAt,
+					nextClaimAt: claimedAt + CLAIM_COOLDOWN_MS,
+				});
+			}
 
 			await interaction.editReply({
-				content: `✅ You claimed <@&${roleId}>. The role was removed from ${removedCount} member(s) and assigned to you. The 15-minute cooldown has started.`,
+				content: `<:db_innkeeper:1506320921617498223> You claimed <@&${roleId}>, have fun with the perks!`,
 			});
 		} catch (error) {
 			console.error("❌ Claim command failed:", error);
