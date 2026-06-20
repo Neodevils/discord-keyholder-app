@@ -6,23 +6,20 @@ const CLAIM_COOLDOWN_MS = 15 * 60 * 1000;
 const DISCORD_API_BASE = "https://discord.com/api/v10";
 const CLAIM_ROLE_ID = "1333017381529976874";
 
-type GuildMember = {
-	user?: {
-		id?: string;
-	};
-	roles?: string[];
-};
-
 type ClaimCooldownRecord = {
-	guildId?: unknown;
-	roleId?: unknown;
-	claimedBy?: unknown;
-	claimedAt?: unknown;
 	nextClaimAt?: unknown;
 };
 
-function getCooldownKey(guildId: string, roleId: string) {
-	return `claim:${guildId}:${roleId}`;
+type ClaimHolderRecord = {
+	userId?: unknown;
+};
+
+function getCooldownKey(guildId: string, roleId: string, userId: string) {
+	return `claim-cooldown:${guildId}:${roleId}:${userId}`;
+}
+
+function getHolderKey(guildId: string, roleId: string) {
+	return `claim-holder:${guildId}:${roleId}`;
 }
 
 function getRemainingCooldown(record: ClaimCooldownRecord | null) {
@@ -95,8 +92,10 @@ const claim: InteractionCommand = {
 			return;
 		}
 
-		const cooldownKey = getCooldownKey(guildId, roleId);
+		const cooldownKey = getCooldownKey(guildId, roleId, userId);
+		const holderKey = getHolderKey(guildId, roleId);
 		const db = tryGetDb();
+
 		const cooldown = db ? ((await db.get(cooldownKey)) as ClaimCooldownRecord | null) : null;
 		const remainingCooldown = getRemainingCooldown(cooldown);
 
@@ -108,12 +107,12 @@ const claim: InteractionCommand = {
 		}
 
 		try {
-			let removedCount = 0;
-			const previousHolderId = typeof cooldown?.claimedBy === "string" ? cooldown.claimedBy : null;
+			const holderRecord = db ? ((await db.get(holderKey)) as ClaimHolderRecord | null) : null;
+			const previousHolderId = typeof holderRecord?.userId === "string" ? holderRecord.userId : null;
+
 			if (previousHolderId && previousHolderId !== userId) {
 				try {
 					await removeRoleFromMember(guildId, roleId, previousHolderId);
-					removedCount = 1;
 				} catch (error) {
 					// If previous holder already doesn't have the role (or can't be edited), we still proceed.
 					console.warn("⚠️ Could not remove role from previous holder:", error);
@@ -123,11 +122,10 @@ const claim: InteractionCommand = {
 
 			if (db) {
 				const claimedAt = Date.now();
+				await db.set(holderKey, {
+					userId,
+				});
 				await db.set(cooldownKey, {
-					guildId,
-					roleId,
-					claimedBy: userId,
-					claimedAt,
 					nextClaimAt: claimedAt + CLAIM_COOLDOWN_MS,
 				});
 			}
